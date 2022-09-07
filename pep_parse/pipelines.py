@@ -1,38 +1,21 @@
 import datetime as dt
 import os
 
-from sqlalchemy import Column, Integer, String, create_engine, func
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session
+from pathlib import Path
 
-Base = declarative_base()
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-
-class Pep(Base):
-    __tablename__ = 'pep'
-
-    id = Column(Integer, primary_key=True)
-    number = Column(Integer)
-    name = Column(String(200))
-    status = Column(String(50))
+BASE_DIR = Path(__file__).parent.parent
 
 
 class PepParsePipeline:
     def open_spider(self, spider):
-        engine = create_engine('sqlite:///sqlite.db')
-        Base.metadata.drop_all(engine)
-        Base.metadata.create_all(engine)
-        self.session = Session(engine)
+        self.status_dict = {}
 
     def process_item(self, item, spider):
-        pep = Pep(
-            number=item['number'],
-            name=item['name'],
-            status=item['status'],
-        )
-        self.session.add(pep)
-        self.session.commit()
+        status = item['status']
+        if status in self.status_dict:
+            self.status_dict[status] += 1
+        else:
+            self.status_dict[status] = 1
         return item
 
     def close_spider(self, spider):
@@ -44,13 +27,7 @@ class PepParsePipeline:
         )
         with open(filename, mode='w', encoding='utf-8') as f:
             f.write('Статус,Количество\n')
-            query = self.session.query(
-                Pep.status,
-                func.count(Pep.status)
-            ).group_by(Pep.status)
-            total = 0
-            for status, quantity in query:
+            total = sum(self.status_dict.values())
+            for status, quantity in self.status_dict.items():
                 f.write(f'{status}, {quantity}\n')
-                total += quantity
             f.write(f'Total,{total}\n')
-        self.session.close()
